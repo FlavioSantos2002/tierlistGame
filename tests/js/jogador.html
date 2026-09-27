@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <title>Testes da tela do jogador</title>
+</head>
+<body>
+  <!-- Mesma estrutura de templates/jogador.html. O cenário vem depois do # na URL. -->
+  <div id="aviso" hidden></div>
+  <div id="jogo"
+       data-url-estado="/api/estado/X"
+       data-url-votar="/api/votar/X"
+       data-url-pular="/api/pular/X"
+       data-url-continuar="/api/continuar/X"></div>
+  <pre id="resultado">rodando</pre>
+
+  <script src="servidor_falso.js"></script>
+  <script src="../../static/comum.js"></script>
+  <script src="../../static/jogador.js"></script>
+  <script src="cenarios_jogador.js"></script>
+</body>
+</html>

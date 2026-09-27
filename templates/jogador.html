@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% block titulo %}{{ jogador.tema_nome }}{% endblock %}
+{% block conteudo %}
+<div id="aviso" class="aviso-flutuante" role="status" hidden></div>
+
+<div id="jogo" class="jogo"
+     data-url-estado="{{ url_for('jogador.estado', codigo=codigo) }}"
+     data-url-votar="{{ url_for('jogador.votar', codigo=codigo) }}"
+     data-url-pular="{{ url_for('jogador.pular', codigo=codigo) }}"
+     data-url-continuar="{{ url_for('jogador.continuar', codigo=codigo) }}">
+  {# Aparece até a primeira resposta do servidor (e fica se o JavaScript estiver desligado). #}
+  <div class="cartao centro">
+    <h1>Olá, {{ jogador.nome }}!</h1>
+    <p>Carregando a partida…</p>
+    <noscript><p class="erro">Esta página precisa do JavaScript ligado.</p></noscript>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='comum.js') }}"></script>
+<script src="{{ url_for('static', filename='jogador.js') }}"></script>
+{% endblock %}

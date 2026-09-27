@@ -1,0 +1,13 @@
+{% extends "base.html" %}
+{% block topo %}
+<header class="topo">
+  <nav>
+    <a href="{{ url_for('admin.lista') }}">Partidas</a>
+    <a href="{{ url_for('admin.nova') }}">Nova partida</a>
+  </nav>
+  <form method="post" action="{{ url_for('admin.sair') }}">
+    <input type="hidden" name="csrf_token" value="{{ token_csrf() }}">
+    <button type="submit" class="secundario">Sair</button>
+  </form>
+</header>
+{% endblock %}

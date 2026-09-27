@@ -1,0 +1,98 @@
+{% extends "admin_base.html" %}
+{% block titulo %}{{ partida.tema_nome }}{% endblock %}
+{% block conteudo %}
+<div id="aviso" class="aviso-flutuante" role="status" hidden></div>
+
+<h1>{{ partida.tema_nome }}</h1>
+{# Os trechos com id são atualizados ao vivo pelo admin_partida.js. #}
+<p>
+  Estado: <strong id="vivo-estado">{{ partida.estado | nome_estado }}</strong> ·
+  Rodada <span id="vivo-rodada">{{ partida.rodada_atual }}</span> de {{ partida.total_rodadas }} ·
+  Criada em {{ partida.criada_em | data }}
+</p>
+
+<div class="controles">
+  <form method="post" id="form-iniciar" action="{{ url_for('admin.iniciar', partida_id=partida.id) }}"
+        {% if partida.estado != "espera" %}hidden{% endif %}>
+    <input type="hidden" name="csrf_token" value="{{ token_csrf() }}">
+    <button type="submit">Iniciar partida</button>
+  </form>
+  <form method="post" id="form-forcar" action="{{ url_for('admin.forcar', partida_id=partida.id) }}"
+        onsubmit="return confirm('Forçar o avanço desta fase?');"
+        {% if partida.estado not in ("votacao", "resultado") %}hidden{% endif %}>
+    <input type="hidden" name="csrf_token" value="{{ token_csrf() }}">
+    {# A fase que o admin está vendo: se a partida já mudou, o clique não faz nada.
+       O JavaScript atualiza estes dois campos junto com a tela. #}
+    <input type="hidden" name="estado" id="forcar-estado" value="{{ partida.estado }}">
+    <input type="hidden" name="rodada" id="forcar-rodada" value="{{ partida.rodada_atual }}">
+    <button type="submit" class="perigo">Forçar avanço</button>
+  </form>
+</div>
+
+<section id="ao-vivo" data-url-estado="{{ url_for('admin.api_estado', partida_id=partida.id) }}"
+         data-nomes-estados='{{ nomes_estados | tojson }}'>
+  <h2>Jogadores</h2>
+  <p id="vivo-presenca" class="suave"></p>
+  <ul id="vivo-jogadores" class="jogadores-ao-vivo"></ul>
+
+  <div id="vivo-item" hidden>
+    <h2 id="vivo-item-titulo">Item da rodada</h2>
+    <div class="resumo-item">
+      <img id="vivo-item-imagem" class="resumo-imagem" alt="" referrerpolicy="no-referrer">
+      <p id="vivo-item-nome" class="resumo-nome"></p>
+    </div>
+    <div id="vivo-distribuicao" class="distribuicao"></div>
+  </div>
+
+  <h2>Tier list do grupo</h2>
+  <div id="vivo-tier"><p class="suave">Carregando…</p></div>
+</section>
+
+<h2>Links dos jogadores</h2>
+{% if not endereco %}
+<div class="erro">
+  <strong>Não consegui descobrir o endereço público.</strong>
+  <p>
+    Confira se o túnel está rodando (métricas em <code>{{ tunel_metrics }}</code>)
+    ou preencha <code>BASE_URL</code> no <code>.env</code>. Depois,
+    <a href="{{ url_for('admin.partida', partida_id=partida.id) }}">recarregue esta página</a>.
+  </p>
+</div>
+{% endif %}
+<ul class="links">
+  {% for j in jogadores %}
+  <li>
+    <span class="nome">{{ j.nome }}</span>
+    {% if endereco %}
+      <input type="text" class="link" readonly
+             value="{{ endereco }}{{ url_for('jogador.tela', codigo=j.codigo) }}"
+             aria-label="Link de {{ j.nome }}">
+      <button type="button" class="copiar">Copiar</button>
+    {% else %}
+      <code>{{ url_for('jogador.tela', codigo=j.codigo) }}</code>
+    {% endif %}
+  </li>
+  {% endfor %}
+</ul>
+
+<h2>Faixas</h2>
+<ul class="faixas-resumo">
+  {% for faixa in faixas %}
+  <li>
+    <span class="etiqueta" style="background: {{ faixa.cor }}; color: {{ faixa.cor | cor_do_texto }}">{{ faixa.rotulo }}</span>
+    {{ faixa.descricao }}
+  </li>
+  {% endfor %}
+</ul>
+
+<form method="post" action="{{ url_for('admin.apagar', partida_id=partida.id) }}"
+      onsubmit="return confirm('Apagar esta partida? Os jogadores vão ver que ela foi encerrada.');">
+  <input type="hidden" name="csrf_token" value="{{ token_csrf() }}">
+  <button type="submit" class="perigo">Apagar partida</button>
+</form>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='comum.js') }}"></script>
+<script src="{{ url_for('static', filename='admin_partida.js') }}"></script>
+{% endblock %}

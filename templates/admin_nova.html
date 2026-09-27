@@ -1,0 +1,117 @@
+{% extends "admin_base.html" %}
+{% block titulo %}Nova partida{% endblock %}
+
+{% macro linha_faixa(faixa) %}
+<div class="faixa">
+  <input type="color" name="faixa_cor" value="{{ faixa.cor }}" aria-label="Cor da faixa">
+  <input type="text" name="faixa_rotulo" value="{{ faixa.rotulo }}" class="rotulo"
+         maxlength="{{ max_rotulo }}" required placeholder="S"
+         aria-label="Rótulo (até {{ max_rotulo }} caracteres)">
+  <input type="text" name="faixa_descricao" value="{{ faixa.descricao }}" class="descricao"
+         maxlength="{{ max_descricao }}" placeholder="Descrição (opcional)"
+         aria-label="Descrição (até {{ max_descricao }} caracteres)">
+  <button type="button" class="remover-faixa secundario" title="Remover faixa" aria-label="Remover faixa">✕</button>
+</div>
+{% endmacro %}
+
+{% block conteudo %}
+<h1>Nova partida</h1>
+
+{% if erro_arquivo %}
+  <div class="erro">
+    <strong>Problema no arquivo de temas.</strong>
+    <p>{{ erro_arquivo }}</p>
+    <p>Corrija o arquivo e <a href="{{ url_for('admin.nova') }}">recarregue esta página</a>.</p>
+  </div>
+{% else %}
+
+  {% if erros %}
+  <div class="erro">
+    <strong>Corrija antes de criar:</strong>
+    <ul>{% for erro in erros %}<li>{{ erro }}</li>{% endfor %}</ul>
+  </div>
+  {% endif %}
+
+  <form method="post" id="form-nova">
+    <input type="hidden" name="csrf_token" value="{{ token_csrf() }}">
+
+    <fieldset>
+      <legend>1. Tema</legend>
+      <select name="tema" id="tema" required>
+        <option value="">Escolha um tema…</option>
+        {% for tema in temas %}
+          {% if tema.valido %}
+            <option value="{{ tema.nome }}" {% if tema.nome == formulario.tema %}selected{% endif %}>
+              {{ tema.nome }} ({{ tema.itens | length }} itens)
+            </option>
+          {% else %}
+            <option disabled>⚠ {{ tema.nome or "(sem nome)" }} (inválido)</option>
+          {% endif %}
+        {% endfor %}
+      </select>
+
+      {% set invalidos = temas | rejectattr("valido") | list %}
+      {% if invalidos %}
+      <details class="temas-invalidos" open>
+        <summary>{{ invalidos | length }} tema(s) com problema no temas.json</summary>
+        <ul>
+          {% for tema in invalidos %}
+          <li>
+            <strong>{{ tema.nome or "(sem nome)" }}</strong>:
+            {{ tema.motivos[:5] | join("; ") }}{% if tema.motivos | length > 5 %}; e mais {{ tema.motivos | length - 5 }} problema(s){% endif %}.
+          </li>
+          {% endfor %}
+        </ul>
+      </details>
+      {% endif %}
+
+      {# Preenchido pelo JavaScript com a assinatura do tema mostrado na prévia. #}
+      <input type="hidden" name="assinatura_tema" id="assinatura-tema" value="">
+
+      <div id="previa" hidden>
+        <p id="previa-resumo"></p>
+        <div id="previa-grade" class="grade"></div>
+      </div>
+    </fieldset>
+
+    <fieldset>
+      <legend>2. Rodadas</legend>
+      <input type="number" name="rodadas" id="rodadas" min="1" value="{{ formulario.rodadas }}" required>
+      <small id="rodadas-ajuda">Mínimo 1, máximo a quantidade de itens do tema.</small>
+    </fieldset>
+
+    <fieldset>
+      <legend>3. Faixas (da melhor, em cima, para a pior)</legend>
+      <div id="faixas" data-min="{{ min_faixas }}" data-max="{{ max_faixas }}">
+        {% for faixa in formulario.faixas %}{{ linha_faixa(faixa) }}{% endfor %}
+      </div>
+      <template id="modelo-faixa">{{ linha_faixa({"rotulo": "", "descricao": "", "cor": "#cccccc"}) }}</template>
+      <button type="button" id="adicionar-faixa" class="secundario">+ Adicionar faixa</button>
+      <small>
+        De {{ min_faixas }} a {{ max_faixas }} faixas. Rótulo: até {{ max_rotulo }} caracteres,
+        sem repetir. Descrição: opcional, até {{ max_descricao }} caracteres.
+      </small>
+    </fieldset>
+
+    <fieldset>
+      <legend>4. Jogadores</legend>
+      <textarea name="jogadores" rows="8" placeholder="Um nome por linha" required>{{ formulario.jogadores }}</textarea>
+      <small>
+        De {{ min_jogadores }} a {{ max_jogadores }} nomes, um por linha, sem repetição
+        (maiúsculas e minúsculas contam como iguais). Até {{ max_nome_jogador }} caracteres por nome.
+      </small>
+    </fieldset>
+
+    <button type="submit">Criar partida</button>
+  </form>
+
+  {# Dados dos temas válidos para a prévia (tojson deixa o texto seguro dentro do HTML). #}
+  <script type="application/json" id="dados-temas">{{ temas_validos | tojson }}</script>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+{% if not erro_arquivo %}
+<script src="{{ url_for('static', filename='nova_partida.js') }}"></script>
+{% endif %}
+{% endblock %}

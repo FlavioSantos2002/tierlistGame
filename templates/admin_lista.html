@@ -1,0 +1,36 @@
+{% extends "admin_base.html" %}
+{% block titulo %}Partidas{% endblock %}
+{% block conteudo %}
+<h1>Partidas</h1>
+<p><a class="botao" href="{{ url_for('admin.nova') }}">+ Nova partida</a></p>
+
+{% if partidas %}
+<div class="tabela-rolavel">
+  <table>
+    <thead>
+      <tr><th>Tema</th><th>Estado</th><th>Rodada</th><th>Criada em</th><th>Ações</th></tr>
+    </thead>
+    <tbody>
+      {% for p in partidas %}
+      <tr>
+        <td>{{ p.tema_nome }}</td>
+        <td>{{ p.estado | nome_estado }}</td>
+        <td>{{ p.rodada_atual }} / {{ p.total_rodadas }}</td>
+        <td>{{ p.criada_em | data }}</td>
+        <td class="acoes">
+          <a class="botao" href="{{ url_for('admin.partida', partida_id=p.id) }}">Abrir</a>
+          <form method="post" action="{{ url_for('admin.apagar', partida_id=p.id) }}"
+                onsubmit="return confirm('Apagar esta partida? Os jogadores vão ver que ela foi encerrada.');">
+            <input type="hidden" name="csrf_token" value="{{ token_csrf() }}">
+            <button type="submit" class="perigo">Apagar</button>
+          </form>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% else %}
+<p>Nenhuma partida ainda.</p>
+{% endif %}
+{% endblock %}
