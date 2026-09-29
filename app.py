@@ -61,7 +61,8 @@ def criar_app():
         MAX_CONTENT_LENGTH=64 * 1024,
     )
 
-    banco.criar_tabelas(app.config["DB_PATH"])
+    # Cria o banco ou migra um banco antigo (com backup antes), sem apagar nada.
+    banco.preparar(app.config["DB_PATH"])
     app.teardown_appcontext(banco.fechar)
 
     app.register_blueprint(admin)

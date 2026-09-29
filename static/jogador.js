@@ -18,8 +18,9 @@
   // tela seja redesenhada no meio (ex.: outro jogador votou). Só o fim da
   // ação libera, então dois votos nunca saem ao mesmo tempo.
   var acaoEmAndamento = false;
-  // Partida apagada: estado final. Nada mais redesenha a tela nem envia ações.
-  var apagada = false;
+  // Partida apagada ou jogador removido: estado final. Nada mais redesenha a
+  // tela nem envia ações.
+  var fimDefinitivo = false;
   var timerAviso = null;
   var avisoTemporario = false;  // avisos de ação somem sozinhos; o de conexão, não
 
@@ -51,7 +52,7 @@
   }
 
   function agir(tipo, corpo) {
-    if (acaoEmAndamento || apagada || !estadoAtual) return;
+    if (acaoEmAndamento || fimDefinitivo || !estadoAtual) return;
     acaoEmAndamento = true;
     desativarBotoes();
     corpo.rodada = estadoAtual.rodada;
@@ -63,7 +64,7 @@
       // A ação terminou (deu certo, foi recusada ou ficou sem conexão):
       // só agora os botões voltam, redesenhando com o estado mais recente.
       acaoEmAndamento = false;
-      if (!apagada && estadoAtual) desenhar(estadoAtual);
+      if (!fimDefinitivo && estadoAtual) desenhar(estadoAtual);
     });
   }
 
@@ -180,11 +181,12 @@
     return tela;
   }
 
-  // Mesmo texto da página jogador_sem_partida.html (link aberto depois de apagar).
-  function telaApagada(mensagem) {
+  // Telas finais: mesmos textos das páginas jogador_sem_partida.html e
+  // jogador_removido.html (link aberto depois de apagar / de remover).
+  function telaFinal(titulo, texto) {
     var tela = el("div", "cartao centro");
-    tela.appendChild(el("h1", null, mensagem || "Esta partida foi encerrada pelo admin"));
-    tela.appendChild(el("p", null, "Se você acha que é engano, confira o link com quem te convidou."));
+    tela.appendChild(el("h1", null, titulo));
+    tela.appendChild(el("p", null, texto));
     return tela;
   }
 
@@ -196,7 +198,7 @@
   };
 
   function desenhar(estado) {
-    if (apagada) return;
+    if (fimDefinitivo) return;
     estadoAtual = estado;
     raiz.textContent = "";
     raiz.appendChild(TELAS[estado.estado](estado));
@@ -213,13 +215,20 @@
     }
     if (status === 0) {
       mostrarAviso("Sem conexão. Tentando de novo…");
-    } else if (status === 404 && dados && dados.apagada) {
-      apagada = true;
+    } else if ((status === 404 && dados && dados.apagada) || (status === 403 && dados && dados.removido)) {
+      // Partida apagada ou jogador removido: estado final, a tela não muda mais.
+      fimDefinitivo = true;
       acaoEmAndamento = false;
       sincronizador.parar();
       esconderAviso();
       raiz.textContent = "";
-      raiz.appendChild(telaApagada(dados.mensagem));
+      if (dados.removido) {
+        raiz.appendChild(telaFinal("Você foi removido desta partida",
+          "Se você acha que é engano, fale com quem te convidou."));
+      } else {
+        raiz.appendChild(telaFinal("Esta partida foi encerrada pelo admin",
+          "Se você acha que é engano, confira o link com quem te convidou."));
+      }
     } else if (dados && dados.erro) {
       // Ex.: a rodada fechou enquanto o voto estava a caminho (409).
       mostrarAviso(dados.erro, 4);

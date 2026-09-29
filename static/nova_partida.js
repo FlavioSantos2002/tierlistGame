@@ -91,6 +91,23 @@
   }
 
   seletor.addEventListener("change", function () { mostrarPrevia(true); });
+
+  // ----- Modo: no "cada um no seu ritmo", as "rodadas" são o número de itens -----
+
+  var tituloRodadas = document.getElementById("rodadas-titulo");
+  var dicaDoModo = document.getElementById("rodadas-modo");
+
+  function atualizarModo() {
+    var marcado = document.querySelector('input[name="modo"]:checked');
+    var individual = marcado && marcado.value === "individual";
+    tituloRodadas.textContent = individual ? "3. Número de itens" : "3. Rodadas";
+    dicaDoModo.hidden = !individual;
+  }
+
+  Array.prototype.forEach.call(document.querySelectorAll('input[name="modo"]'), function (opcao) {
+    opcao.addEventListener("change", atualizarModo);
+  });
+  atualizarModo();
   // Ao voltar com erro, mantém o número de rodadas que o admin digitou.
   mostrarPrevia(false);
 

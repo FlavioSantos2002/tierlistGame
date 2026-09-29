@@ -21,6 +21,7 @@ var Falso = (function () {
         url: url,
         metodo: config.method,
         corpo: config.body ? JSON.parse(config.body) : null,
+        quando: Date.now(), // hora do envio (tempo virtual do navegador)
         terminado: false,   // saiu da conta de "no ar" (respondido ou cancelado)
         respondido: false,  // a promessa do fetch já terminou
         responder: function (status, dados) {

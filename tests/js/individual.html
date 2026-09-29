@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <title>Testes da tela do jogador (modo individual)</title>
+</head>
+<body>
+  <!-- Mesma estrutura de templates/jogador.html no modo individual. -->
+  <div id="aviso" hidden></div>
+  <div id="jogo"
+       data-url-estado="/api/estado/X"
+       data-url-responder="/api/responder/X"
+       data-url-finalizar="/api/finalizar/X"></div>
+  <pre id="resultado">rodando</pre>
+
+  <script src="servidor_falso.js"></script>
+  <script src="auxiliares.js"></script>
+  <script src="../../static/comum.js"></script>
+  <script src="../../static/jogador_individual.js"></script>
+  <script src="cenarios_individual.js"></script>
+</body>
+</html>

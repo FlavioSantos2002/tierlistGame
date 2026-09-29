@@ -36,7 +36,20 @@
     <input type="hidden" name="csrf_token" value="{{ token_csrf() }}">
 
     <fieldset>
-      <legend>1. Tema</legend>
+      <legend>1. Modo</legend>
+      <label class="opcao">
+        <input type="radio" name="modo" value="ao_vivo" {% if formulario.modo != "individual" %}checked{% endif %}>
+        <strong>Ao vivo</strong>: todo mundo junto, um item por rodada, com votação e resultado a cada item.
+      </label>
+      <label class="opcao">
+        <input type="radio" name="modo" value="individual" {% if formulario.modo == "individual" %}checked{% endif %}>
+        <strong>Cada um no seu ritmo</strong>: cada pessoa monta a própria lista quando quiser; no fim,
+        todos veem a lista geral, as dos outros e a própria compatibilidade.
+      </label>
+    </fieldset>
+
+    <fieldset>
+      <legend>2. Tema</legend>
       <select name="tema" id="tema" required>
         <option value="">Escolha um tema…</option>
         {% for tema in temas %}
@@ -75,13 +88,14 @@
     </fieldset>
 
     <fieldset>
-      <legend>2. Rodadas</legend>
+      <legend id="rodadas-titulo">3. Rodadas</legend>
       <input type="number" name="rodadas" id="rodadas" min="1" value="{{ formulario.rodadas }}" required>
       <small id="rodadas-ajuda">Mínimo 1, máximo a quantidade de itens do tema.</small>
+      <small id="rodadas-modo" hidden>No modo "cada um no seu ritmo", este é o número de itens que cada pessoa classifica.</small>
     </fieldset>
 
     <fieldset>
-      <legend>3. Faixas (da melhor, em cima, para a pior)</legend>
+      <legend>4. Faixas (da melhor, em cima, para a pior)</legend>
       <div id="faixas" data-min="{{ min_faixas }}" data-max="{{ max_faixas }}">
         {% for faixa in formulario.faixas %}{{ linha_faixa(faixa) }}{% endfor %}
       </div>
@@ -94,7 +108,7 @@
     </fieldset>
 
     <fieldset>
-      <legend>4. Jogadores</legend>
+      <legend>5. Jogadores</legend>
       <textarea name="jogadores" rows="8" placeholder="Um nome por linha" required>{{ formulario.jogadores }}</textarea>
       <small>
         De {{ min_jogadores }} a {{ max_jogadores }} nomes, um por linha, sem repetição

@@ -4,33 +4,90 @@
 <div id="aviso" class="aviso-flutuante" role="status" hidden></div>
 
 <h1>{{ partida.tema_nome }}</h1>
-{# Os trechos com id são atualizados ao vivo pelo admin_partida.js. #}
+{# Os trechos com id são atualizados ao vivo pelo JavaScript da tela. #}
 <p>
+  {% if partida.modo == "individual" %}Cada um no seu ritmo{% else %}Ao vivo{% endif %} ·
   Estado: <strong id="vivo-estado">{{ partida.estado | nome_estado }}</strong> ·
-  Rodada <span id="vivo-rodada">{{ partida.rodada_atual }}</span> de {{ partida.total_rodadas }} ·
+  {% if partida.modo == "individual" %}
+    {{ partida.total_rodadas }} itens ·
+  {% else %}
+    Rodada <span id="vivo-rodada">{{ partida.rodada_atual }}</span> de {{ partida.total_rodadas }} ·
+  {% endif %}
   Criada em {{ partida.criada_em | data }}
 </p>
 
-<div class="controles">
-  <form method="post" id="form-iniciar" action="{{ url_for('admin.iniciar', partida_id=partida.id) }}"
-        {% if partida.estado != "espera" %}hidden{% endif %}>
-    <input type="hidden" name="csrf_token" value="{{ token_csrf() }}">
-    <button type="submit">Iniciar partida</button>
-  </form>
-  <form method="post" id="form-forcar" action="{{ url_for('admin.forcar', partida_id=partida.id) }}"
-        onsubmit="return confirm('Forçar o avanço desta fase?');"
-        {% if partida.estado not in ("votacao", "resultado") %}hidden{% endif %}>
-    <input type="hidden" name="csrf_token" value="{{ token_csrf() }}">
-    {# A fase que o admin está vendo: se a partida já mudou, o clique não faz nada.
-       O JavaScript atualiza estes dois campos junto com a tela. #}
-    <input type="hidden" name="estado" id="forcar-estado" value="{{ partida.estado }}">
-    <input type="hidden" name="rodada" id="forcar-rodada" value="{{ partida.rodada_atual }}">
-    <button type="submit" class="perigo">Forçar avanço</button>
-  </form>
-</div>
-
-<section id="ao-vivo" data-url-estado="{{ url_for('admin.api_estado', partida_id=partida.id) }}"
+{# Dados usados pelo JavaScript: estado ao vivo e o botão "Remover" de cada jogador.
+   A URL de remover vem com o id 0 no fim; o JavaScript troca pelo id do jogador. #}
+<section id="ao-vivo"
+         data-modo="{{ partida.modo }}"
+         data-url-estado="{{ url_for('admin.api_estado', partida_id=partida.id) }}"
+         data-url-remover="{{ url_for('admin.remover', partida_id=partida.id, jogador_id=0) }}"
+         data-csrf="{{ token_csrf() }}"
          data-nomes-estados='{{ nomes_estados | tojson }}'>
+
+{% if partida.modo == "individual" %}
+
+  {# Os mesmos textos são montados pelo admin_individual.js a cada atualização. #}
+  {% if ninguem_finalizou %}
+    {% set confirmacao_encerrar = "Ninguém finalizou ainda: o resultado ficará vazio. Encerrar e revelar mesmo assim?" %}
+  {% else %}
+    {% set confirmacao_encerrar = "Encerrar a partida e revelar os resultados? Quem não finalizou fica de fora." %}
+  {% endif %}
+  <div class="controles">
+    <form method="post" id="form-encerrar" action="{{ url_for('admin.encerrar', partida_id=partida.id) }}"
+          data-confirmacao="{{ confirmacao_encerrar }}"
+          onsubmit="return confirm(this.getAttribute('data-confirmacao'));"
+          {% if partida.estado != "aberta" %}hidden{% endif %}>
+      <input type="hidden" name="csrf_token" value="{{ token_csrf() }}">
+      <button type="submit" class="perigo">Encerrar e revelar</button>
+    </form>
+  </div>
+
+  <h2>Jogadores</h2>
+  <ul id="vivo-jogadores" class="jogadores-ao-vivo"></ul>
+
+  <h2>Tier list geral <small class="suave">(só com quem já finalizou)</small></h2>
+  <div id="vivo-tier"><p class="suave">Carregando…</p></div>
+
+  <h2>Lista de cada jogador</h2>
+  <div id="vivo-listas"></div>
+
+{% else %}
+
+  <div class="controles">
+    <form method="post" id="form-iniciar" action="{{ url_for('admin.iniciar', partida_id=partida.id) }}"
+          {% if partida.estado != "espera" %}hidden{% endif %}>
+      <input type="hidden" name="csrf_token" value="{{ token_csrf() }}">
+      <button type="submit">Iniciar partida</button>
+    </form>
+    {# "Forçar avanço". O texto do botão e da confirmação dizem o que VAI acontecer
+       na fase que está na tela: fechar a votação (itens sem voto vão para os
+       pulados) não é a mesma coisa que sair do resultado. Os mesmos textos são
+       montados pelo admin_partida.js (textosDoForcar) quando a fase muda. #}
+    {% set n = partida.rodada_atual %}
+    {% if partida.estado == "votacao" %}
+      {% set texto_forcar = "Fechar a votação agora" %}
+      {% set confirmacao_forcar = "Fechar a votação da rodada " ~ n ~ " agora? Quem ainda não votou fica de fora. Se ninguém tiver votado, o item vai para os pulados." %}
+    {% elif n < partida.total_rodadas %}
+      {% set texto_forcar = "Ir para a próxima rodada" %}
+      {% set confirmacao_forcar = "Sair do resultado da rodada " ~ n ~ " e abrir a votação da rodada " ~ (n + 1) ~ "?" %}
+    {% else %}
+      {% set texto_forcar = "Encerrar a partida" %}
+      {% set confirmacao_forcar = "Sair do resultado da última rodada e encerrar a partida?" %}
+    {% endif %}
+    <form method="post" id="form-forcar" action="{{ url_for('admin.forcar', partida_id=partida.id) }}"
+          data-confirmacao="{{ confirmacao_forcar }}"
+          onsubmit="return confirm(this.getAttribute('data-confirmacao'));"
+          {% if partida.estado not in ("votacao", "resultado") %}hidden{% endif %}>
+      <input type="hidden" name="csrf_token" value="{{ token_csrf() }}">
+      {# A fase que o admin está vendo: se a partida já mudou, o clique não faz nada.
+         O JavaScript atualiza estes dois campos junto com a tela. #}
+      <input type="hidden" name="estado" id="forcar-estado" value="{{ partida.estado }}">
+      <input type="hidden" name="rodada" id="forcar-rodada" value="{{ partida.rodada_atual }}">
+      <button type="submit" class="perigo" id="forcar-texto">{{ texto_forcar }}</button>
+    </form>
+  </div>
+
   <h2>Jogadores</h2>
   <p id="vivo-presenca" class="suave"></p>
   <ul id="vivo-jogadores" class="jogadores-ao-vivo"></ul>
@@ -46,6 +103,8 @@
 
   <h2>Tier list do grupo</h2>
   <div id="vivo-tier"><p class="suave">Carregando…</p></div>
+
+{% endif %}
 </section>
 
 <h2>Links dos jogadores</h2>
@@ -94,5 +153,10 @@
 
 {% block scripts %}
 <script src="{{ url_for('static', filename='comum.js') }}"></script>
+<script src="{{ url_for('static', filename='admin_comum.js') }}"></script>
+{% if partida.modo == "individual" %}
+<script src="{{ url_for('static', filename='admin_individual.js') }}"></script>
+{% else %}
 <script src="{{ url_for('static', filename='admin_partida.js') }}"></script>
+{% endif %}
 {% endblock %}

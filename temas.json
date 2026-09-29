@@ -24,6 +24,67 @@
         { "nome": "Lucario", "imagem": "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/other/official-artwork/448.png" },
         { "nome": "Greninja", "imagem": "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/other/official-artwork/658.png" }
       ]
+    },
+    {
+      "nome": "Eletrodomésticos para quem mora sozinho",
+      "itens": [
+        {
+          "nome": "Geladeira",
+          "imagem": "https://commons.wikimedia.org/wiki/Special:FilePath/Fridge.jpg?width=400"
+        },
+        {
+          "nome": "Micro-ondas",
+          "imagem": "https://commons.wikimedia.org/wiki/Special:FilePath/Microwave_oven.jpg?width=400"
+        },
+        {
+          "nome": "Máquina de lavar",
+          "imagem": "https://commons.wikimedia.org/wiki/Special:FilePath/Front_loader_Washing_machine.jpg?width=400"
+        },
+        {
+          "nome": "Air fryer",
+          "imagem": "https://commons.wikimedia.org/wiki/Special:FilePath/Airfryer.jpg?width=400"
+        },
+        {
+          "nome": "Cafeteira elétrica",
+          "imagem": "https://commons.wikimedia.org/wiki/Special:FilePath/Mr_Coffee_Coffee_Maker.JPG?width=400"
+        },
+        {
+          "nome": "Chaleira elétrica",
+          "imagem": "https://commons.wikimedia.org/wiki/Special:FilePath/White_electric_kettle.JPG?width=400"
+        },
+        {
+          "nome": "Sanduicheira",
+          "imagem": "https://commons.wikimedia.org/wiki/Special:FilePath/Sandwich_toaster_open.jpg?width=400"
+        },
+        {
+          "nome": "Forno elétrico",
+          "imagem": "https://commons.wikimedia.org/wiki/Special:FilePath/Toaster_oven.jpg?width=400"
+        },
+        {
+          "nome": "Panela elétrica de arroz",
+          "imagem": "https://commons.wikimedia.org/wiki/Special:FilePath/Rice-cooker.jpg?width=400"
+        },
+        {
+          "nome": "Ventilador",
+          "imagem": "https://commons.wikimedia.org/wiki/Special:FilePath/Samsung_Electric_Fan.JPG?width=400"
+        },
+        {
+          "nome": "Ar-condicionado",
+          "imagem": "https://commons.wikimedia.org/wiki/Special:FilePath/DAIKIN_AIR_CONDITIONER_INDOOR_UNIT.jpg?width=400"
+        },
+        {
+          "nome": "Aspirador de pó",
+          "imagem": "https://commons.wikimedia.org/wiki/Special:FilePath/AEG_vacuum_cleaner.jpg?width=400"
+        },
+        {
+          "nome": "Robô aspirador",
+          "imagem": "https://commons.wikimedia.org/wiki/Special:FilePath/Robot_vacuum_cleaner.jpg?width=400"
+        },
+        {
+          "nome": "Ferro de passar",
+          "imagem": "https://commons.wikimedia.org/wiki/Special:FilePath/Electric_steam_iron.jpg?width=400"
+        }
+      ]
     }
   ]
 }

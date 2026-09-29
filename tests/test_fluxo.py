@@ -34,7 +34,7 @@ def test_fecha_quando_todos_votam(partida):
     assert p.fase() == ("votacao", 1)
     p.votar("Caio", 2)
     assert p.fase() == ("resultado", 1)
-    assert p.item(1)["faixa_indice"] == 1
+    assert p.item(1)["faixa_indice"] == 2          # 1 voto em cada: empate -> pior (B)
 
 
 def test_jogador_que_nunca_entrou_nao_trava(partida):
@@ -46,7 +46,7 @@ def test_jogador_que_nunca_entrou_nao_trava(partida):
     assert p.fase() == ("resultado", 1)
     dados = p.estado("Ana").get_json()
     assert dados["distribuicao"] == [1, 1, 0, 0, 0]   # os dois votos contaram
-    assert p.item(1)["faixa_indice"] == 0          # média 0,5 -> faixa melhor
+    assert p.item(1)["faixa_indice"] == 1          # empate entre S e A -> pior (A)
 
 
 def test_online_parado_trava_ate_ficar_offline(partida):
@@ -68,7 +68,7 @@ def test_offline_que_volta_pode_votar(partida):
     assert p.fase() == ("votacao", 1)              # Beto (online) ainda não votou
     p.votar("Caio", 4)                             # Caio voltou antes de fechar
     p.votar("Beto", 4)
-    assert p.item(1)["faixa_indice"] == 3          # (0 + 4 + 4) / 3 = 2,67 -> 3
+    assert p.item(1)["faixa_indice"] == 4          # 2 votos em D, 1 em S -> D
 
 
 def test_ninguem_online_nao_fecha(partida):
@@ -103,7 +103,7 @@ def test_todos_votaram_fecha_mesmo_offline(partida):
     assert resposta.status_code == 200
     assert p.fase() == ("resultado", 1)
     assert resposta.get_json()["distribuicao"] == [1, 0, 1, 0, 1]
-    assert p.item(1)["faixa_indice"] == 2          # (0 + 2 + 4) / 3 = 2
+    assert p.item(1)["faixa_indice"] == 4          # 1 voto em cada: empate -> pior (D)
 
 
 # ----- Pular -----
@@ -115,7 +115,7 @@ def test_pular_conta_para_fechar(partida):
     p.pular("Beto")
     p.pular("Caio")
     assert p.fase() == ("resultado", 1)
-    assert p.item(1)["faixa_indice"] == 3          # abstenções não entram na média
+    assert p.item(1)["faixa_indice"] == 3          # as duas abstenções não contam
 
 
 def test_todos_pulam_item_fica_fora(partida):
@@ -210,7 +210,7 @@ def test_resultado_mostra_distribuicao_e_destaque(partida):
     assert dados["estado"] == "resultado"
     assert dados["distribuicao"] == [1, 1, 0, 0, 0]
     assert dados["abstencoes"] == 1
-    assert dados["tier_list"][0][0]["novo"] is True
+    assert dados["tier_list"][1][0]["novo"] is True      # empate S/A -> A
 
 
 # ----- Pedidos inválidos -----
@@ -319,6 +319,8 @@ def test_admin_ve_quem_esta_online_e_quem_agiu(partida):
     login_admin(p)
     dados = p.cliente.get(f"/admin/api/estado/{p.id}").get_json()
     assert dados["estado"] == "votacao"                    # Caio online e parado
+    assert all(isinstance(j.pop("id"), int) for j in dados["jogadores"])
+    assert all(j.pop("removido") is False for j in dados["jogadores"])
     assert dados["jogadores"] == [
         {"nome": "Ana", "entrou": True, "online": True, "acao": "votou"},
         {"nome": "Beto", "entrou": True, "online": True, "acao": "pulou"},

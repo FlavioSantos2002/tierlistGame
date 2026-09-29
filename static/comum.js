@@ -4,7 +4,7 @@
 var TierList = (function () {
   "use strict";
 
-  var INTERVALO_MS = 2000;      // polling a cada 2 s
+  var INTERVALO_PADRAO_MS = 2000;   // polling a cada 2 s (modo ao vivo)
   var TEMPO_LIMITE_MS = 8000;   // pedido sem resposta em 8 s conta como "sem conexão"
 
   // ----- Criação de elementos (sempre com textContent: nada vira HTML) -----
@@ -39,16 +39,29 @@ var TierList = (function () {
     return img;
   }
 
-  function miniatura(item) {
+  // `aoTocar` (opcional): função chamada com o item quando ele é tocado.
+  function miniatura(item, aoTocar) {
     var figura = el("figure", item.novo ? "miniatura-tier novo" : "miniatura-tier");
     figura.appendChild(imagem(item));
     figura.appendChild(el("figcaption", null, item.nome));
+    if (aoTocar) {
+      figura.className += " tocavel";
+      figura.setAttribute("role", "button");
+      figura.tabIndex = 0;
+      figura.title = "Tocar para mudar a resposta";
+      figura.addEventListener("click", function () { aoTocar(item); });
+      figura.addEventListener("keydown", function (evento) {
+        if (evento.key === "Enter" || evento.key === " ") { evento.preventDefault(); aoTocar(item); }
+      });
+    }
     return figura;
   }
 
   // ----- Tier list e distribuição de votos -----
 
-  function desenharTierList(container, estado) {
+  // `estado` precisa de: faixas, tier_list (uma lista de itens por faixa) e pulados.
+  // `aoTocar` (opcional): torna os itens tocáveis (lista pessoal do modo individual).
+  function desenharTierList(container, estado, aoTocar) {
     container.textContent = "";
     var tabela = el("div", "tier-list");
     estado.faixas.forEach(function (faixa, indice) {
@@ -58,7 +71,7 @@ var TierList = (function () {
       if (faixa.descricao) rotulo.title = faixa.descricao;
       var itens = el("div", "tier-itens");
       estado.tier_list[indice].forEach(function (item) {
-        itens.appendChild(miniatura(item));
+        itens.appendChild(miniatura(item, aoTocar));
       });
       linha.appendChild(rotulo);
       linha.appendChild(itens);
@@ -70,7 +83,7 @@ var TierList = (function () {
       var area = el("div", "pulados");
       area.appendChild(el("h3", null, "Itens pulados"));
       var itens = el("div", "tier-itens");
-      estado.pulados.forEach(function (item) { itens.appendChild(miniatura(item)); });
+      estado.pulados.forEach(function (item) { itens.appendChild(miniatura(item, aoTocar)); });
       area.appendChild(itens);
       container.appendChild(area);
     }
@@ -111,6 +124,29 @@ var TierList = (function () {
     }
   }
 
+  // Aviso flutuante (sem conexão, ação recusada). Avisos com `segundos` somem
+  // sozinhos; o de conexão fica até `esconderSeNaoTemporario()` (resposta ok).
+  function criarAviso(elemento) {
+    var timer = null;
+    var temporario = false;
+    function esconder() {
+      clearTimeout(timer);
+      temporario = false;
+      elemento.hidden = true;
+    }
+    return {
+      mostrar: function (texto, segundos) {
+        elemento.textContent = texto;
+        elemento.hidden = false;
+        clearTimeout(timer);
+        temporario = Boolean(segundos);
+        if (segundos) timer = setTimeout(esconder, segundos * 1000);
+      },
+      esconder: esconder,
+      esconderSeNaoTemporario: function () { if (!temporario) esconder(); }
+    };
+  }
+
   // "Faltam X de Y online (N offline)"
   function textoPresenca(presenca) {
     var texto = "Faltam " + presenca.faltam + " de " + presenca.online + " online";
@@ -136,7 +172,7 @@ var TierList = (function () {
   }
 
   // Cria o "sincronizador" de uma tela:
-  // - consulta opcoes.urlEstado a cada 2 s;
+  // - consulta opcoes.urlEstado a cada opcoes.intervaloMs (padrão: 2 s);
   // - chama opcoes.desenhar(estado) só quando a versão do estado muda
   //   (e sempre depois de uma ação);
   // - chama opcoes.aoResponder(status, dados) em toda resposta (status 0 = sem conexão).
@@ -155,6 +191,7 @@ var TierList = (function () {
     var pollingNaFila = false;  // consulta de estado esperando a vez
     var versao = null;
     var parado = false;
+    var intervaloMs = opcoes.intervaloMs || INTERVALO_PADRAO_MS;
 
     function tratar(status, dados, sempreDesenhar) {
       if (parado) return;
@@ -221,7 +258,7 @@ var TierList = (function () {
         pollingNaFila = false;
         enviar("GET", opcoes.urlEstado).then(function () {
           if (!parado) {
-            setTimeout(function () { pollingNaFila = true; proximo(); }, INTERVALO_MS);
+            setTimeout(function () { pollingNaFila = true; proximo(); }, intervaloMs);
           }
         });
       }
@@ -251,6 +288,7 @@ var TierList = (function () {
     desenharDistribuicao: desenharDistribuicao,
     faixaDoItemNovo: faixaDoItemNovo,
     textoPresenca: textoPresenca,
+    criarAviso: criarAviso,
     criarSincronizador: criarSincronizador
   };
 })();

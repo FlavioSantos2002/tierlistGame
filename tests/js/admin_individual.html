@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <title>Testes da tela do admin (modo individual)</title>
+</head>
+<body>
+  <!-- Mesma estrutura de templates/admin_partida.html no modo individual. -->
+  <div id="aviso" hidden></div>
+  <strong id="vivo-estado"></strong>
+  <section id="ao-vivo" data-modo="individual"
+           data-url-estado="/admin/api/estado/7"
+           data-url-remover="/admin/partida/7/remover/0"
+           data-csrf="token-de-teste"
+           data-nomes-estados='{"aberta": "Aberta", "encerrada": "Encerrada"}'>
+    <form id="form-encerrar" data-confirmacao="?"></form>
+    <ul id="vivo-jogadores"></ul>
+    <div id="vivo-tier"></div>
+    <div id="vivo-listas"></div>
+  </section>
+  <pre id="resultado">rodando</pre>
+
+  <script src="servidor_falso.js"></script>
+  <script src="auxiliares.js"></script>
+  <script src="../../static/comum.js"></script>
+  <script src="../../static/admin_comum.js"></script>
+  <script src="../../static/admin_individual.js"></script>
+  <script src="cenarios_admin_individual.js"></script>
+</body>
+</html>

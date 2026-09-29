@@ -31,22 +31,23 @@ def aplicacao(tmp_path):
     """App com um banco novo e vazio para cada teste."""
     caminho = str(tmp_path / "teste.db")
     modulo_app.app.config.update(DB_PATH=caminho, TESTING=True)
-    banco.criar_tabelas(caminho)
+    banco.preparar(caminho)
     return modulo_app.app
 
 
 @pytest.fixture
 def partida(aplicacao):
     """Fábrica de partidas de teste. Uso: p = partida(jogadores=[...], rodadas=2)."""
-    def fabricar(jogadores=("Ana", "Beto", "Caio"), rodadas=2, faixas=5, iniciar=True):
-        return PartidaDeTeste(aplicacao, jogadores, rodadas, faixas, iniciar)
+    def fabricar(jogadores=("Ana", "Beto", "Caio"), rodadas=2, faixas=5, iniciar=True,
+                 modo="ao_vivo"):
+        return PartidaDeTeste(aplicacao, jogadores, rodadas, faixas, iniciar, modo)
     return fabricar
 
 
 class PartidaDeTeste:
     """Atalhos para montar cenários: cria a partida e fala com a API como os jogadores."""
 
-    def __init__(self, aplicacao, jogadores, rodadas, n_faixas, iniciar):
+    def __init__(self, aplicacao, jogadores, rodadas, n_faixas, iniciar, modo="ao_vivo"):
         self.app = aplicacao
         self.cliente = aplicacao.test_client()
         tema = {
@@ -55,7 +56,7 @@ class PartidaDeTeste:
         }
         faixas = [{"rotulo": str(i), "descricao": "", "cor": "#ffffff"} for i in range(n_faixas)]
         with aplicacao.app_context():
-            self.id = criar_partida(tema, rodadas, faixas, list(jogadores))
+            self.id = criar_partida(tema, rodadas, faixas, list(jogadores), modo=modo)
             con = banco.obter()
             self.codigos = {
                 linha["nome"]: linha["codigo"]
@@ -63,7 +64,7 @@ class PartidaDeTeste:
                     "SELECT nome, codigo FROM jogadores WHERE partida_id = ?", (self.id,)
                 )
             }
-            if iniciar:
+            if iniciar and modo == "ao_vivo":
                 with banco.transacao(con):
                     jogo.iniciar(con, self.id)
 
@@ -144,6 +145,38 @@ class PartidaDeTeste:
                 "UPDATE jogadores SET visto_em = ? WHERE codigo = ?",
                 (time.time() - 100, self.codigos[nome]),
             )
+
+    # --- modo individual ---
+
+    def ordem(self, nome):
+        """Ids dos itens na ordem sorteada para o jogador."""
+        return [l["item_id"] for l in self.sql(
+            "SELECT o.item_id FROM ordem_jogador o JOIN jogadores j ON j.id = o.jogador_id"
+            " WHERE j.codigo = ? ORDER BY o.posicao", (self.codigos[nome],))]
+
+    def revisao_do_item(self, nome, item_id):
+        linhas = self.sql(
+            "SELECT v.revisao FROM votos v JOIN jogadores j ON j.id = v.jogador_id"
+            " WHERE j.codigo = ? AND v.item_id = ?", (self.codigos[nome], item_id))
+        return linhas[0]["revisao"] if linhas else 0
+
+    def responder(self, nome, item_id, faixa, revisao=None, esperado=200):
+        """Resposta do modo individual (faixa=None é "pulei")."""
+        if revisao is None:
+            revisao = self.revisao_do_item(nome, item_id)
+        resposta = self.acao("responder", nome, item=item_id, faixa=faixa, revisao=revisao)
+        assert resposta.status_code == esperado, resposta.get_json()
+        return resposta
+
+    def responder_tudo(self, nome, faixa_de):
+        """Responde todos os itens. `faixa_de(item_id)` diz a faixa (ou None)."""
+        for item_id in self.ordem(nome):
+            self.responder(nome, item_id, faixa_de(item_id))
+
+    def finalizar(self, nome, esperado=200):
+        resposta = self.acao("finalizar", nome)
+        assert resposta.status_code == esperado, resposta.get_json()
+        return resposta
 
     def entrar(self, *nomes):
         """Os jogadores abrem a tela (um polling cada)."""

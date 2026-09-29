@@ -1,7 +1,10 @@
-"""Motor do jogo: regras da partida e mudanças de estado.
+"""Motor do jogo: regras da partida e mudanças de estado (modo ao vivo).
 
-Estados da partida:
+Estados da partida ao vivo:
     espera -> (votacao <-> resultado) x N rodadas -> encerrada
+O modo individual ("cada um no seu ritmo") fica em individual.py; aqui só há
+o que é comum aos dois (regra da maioria, remover jogador) e o despacho de
+montar_estado para o módulo certo.
 
 O arquivo tem duas partes:
 1. Regras puras (sem banco): calcular_faixa, pode_fechar_votacao e
@@ -11,10 +14,9 @@ O arquivo tem duas partes:
    roda por vez, e cada mudança confere o estado atual antes de mudar,
    a rodada nunca fecha nem avança duas vezes.
 """
-import math
 import zlib
+from collections import Counter
 from dataclasses import dataclass
-from fractions import Fraction
 
 # Um jogador é "online" se foi visto (fez polling ou ação) nos últimos 15 segundos.
 ONLINE_SEGUNDOS = 15
@@ -24,6 +26,7 @@ NOMES_DOS_ESTADOS = {
     "espera": "Aguardando início",
     "votacao": "Votação",
     "resultado": "Resultado",
+    "aberta": "Aberta",
     "encerrada": "Encerrada",
 }
 
@@ -47,16 +50,18 @@ class AcaoInvalida(Exception):
 def calcular_faixa(votos):
     """Índice da faixa do item a partir dos índices votados (0 = melhor).
 
-    É a média arredondada. Empate exato em .5 vai para a faixa melhor
-    (índice menor). Sem votos, devolve None (o item fica "pulado").
+    Regra da maioria: a faixa com mais votos. Empate: vai para a PIOR faixa
+    entre as empatadas (maior índice). Abstenções não entram na lista.
+    Sem votos, devolve None (o item fica "pulado").
 
-    A conta usa Fraction (fração exata), sem erro de ponto flutuante.
-    ceil(media - 1/2) arredonda .5 para baixo: 1.5 -> 1, 1.6 -> 2, 1.4 -> 1.
+    Exemplos (0 = S ... 4 = D): [1, 1, 2, 2] -> 2 (B);  [0, 0, 4, 4] -> 4 (D);
+    [0, 2, 3] -> 3 (C).
     """
     if not votos:
         return None
-    media = Fraction(sum(votos), len(votos))
-    return math.ceil(media - Fraction(1, 2))
+    contagem = Counter(votos)
+    mais_votos = max(contagem.values())
+    return max(faixa for faixa, quantidade in contagem.items() if quantidade == mais_votos)
 
 
 def pode_fechar_votacao(ids_jogadores, ids_online, ids_que_votaram, ids_que_pularam):
@@ -107,11 +112,16 @@ def versao_do_estado(versao_banco, online):
 class Fase:
     partida: dict
     faixas: list
-    jogadores: list
+    jogadores: list             # todos, inclusive removidos (o admin vê a lista inteira)
     item: dict | None           # item da rodada atual (None na espera)
-    votos: dict                 # jogador_id -> índice da faixa, ou None se pulou
-    continuaram: set            # ids de quem apertou "Continuar" nesta rodada
+    votos: dict                 # SÓ jogadores ativos: jogador_id -> faixa, ou None se pulou
+    continuaram: set            # SÓ ativos: ids de quem apertou "Continuar" nesta rodada
     revisoes: dict              # jogador_id -> revisão do voto/abstenção (sem linha = 0)
+
+    @property
+    def ativos(self):
+        """Jogadores que não foram removidos: só eles contam nas regras."""
+        return [j for j in self.jogadores if j["removido_em"] is None]
 
     @property
     def estado(self):
@@ -140,7 +150,7 @@ def ler_fase(con, partida_id):
         (partida_id,),
     ).fetchall()
     jogadores = con.execute(
-        "SELECT id, nome, visto_em FROM jogadores WHERE partida_id = ? ORDER BY id",
+        "SELECT id, nome, visto_em, removido_em FROM jogadores WHERE partida_id = ? ORDER BY id",
         (partida_id,),
     ).fetchall()
 
@@ -153,15 +163,21 @@ def ler_fase(con, partida_id):
             "SELECT * FROM itens WHERE partida_id = ? AND rodada = ?",
             (partida_id, partida["rodada_atual"]),
         ).fetchone()
+        # Votos e "continuar" de jogadores removidos não contam em nada.
         for linha in con.execute(
-            "SELECT jogador_id, faixa_indice, revisao FROM votos WHERE item_id = ?", (item["id"],)
+            "SELECT v.jogador_id, v.faixa_indice, v.revisao FROM votos v"
+            " JOIN jogadores j ON j.id = v.jogador_id"
+            " WHERE v.item_id = ? AND j.removido_em IS NULL",
+            (item["id"],),
         ):
             votos[linha["jogador_id"]] = linha["faixa_indice"]
             revisoes[linha["jogador_id"]] = linha["revisao"]
         continuaram = {
             linha["jogador_id"]
             for linha in con.execute(
-                "SELECT jogador_id FROM continuar WHERE item_id = ?", (item["id"],)
+                "SELECT c.jogador_id FROM continuar c JOIN jogadores j ON j.id = c.jogador_id"
+                " WHERE c.item_id = ? AND j.removido_em IS NULL",
+                (item["id"],),
             )
         }
     return Fase(dict(partida), faixas, jogadores, item and dict(item), votos, continuaram, revisoes)
@@ -179,7 +195,7 @@ def iniciar(con, partida_id):
     """espera -> votacao da rodada 1. Devolve True se mudou."""
     cursor = con.execute(
         "UPDATE partidas SET estado = 'votacao', rodada_atual = 1, versao = versao + 1"
-        " WHERE id = ? AND estado = 'espera'",
+        " WHERE id = ? AND estado = 'espera' AND modo = 'ao_vivo'",
         (partida_id,),
     )
     return cursor.rowcount == 1
@@ -202,10 +218,12 @@ def fechar_votacao(con, partida_id, rodada):
     item = con.execute(
         "SELECT id FROM itens WHERE partida_id = ? AND rodada = ?", (partida_id, rodada)
     ).fetchone()
+    # Só votos de jogadores ativos (abstenções também ficam de fora).
     votos = [
         linha["faixa_indice"]
         for linha in con.execute(
-            "SELECT faixa_indice FROM votos WHERE item_id = ? AND faixa_indice IS NOT NULL",
+            "SELECT v.faixa_indice FROM votos v JOIN jogadores j ON j.id = v.jogador_id"
+            " WHERE v.item_id = ? AND v.faixa_indice IS NOT NULL AND j.removido_em IS NULL",
             (item["id"],),
         )
     ]
@@ -250,13 +268,13 @@ def verificar_avanco(con, partida_id, agora):
     (alguém ficar offline pode ser o que libera o avanço). Devolve True se mudou.
     """
     fase = ler_fase(con, partida_id)
-    if fase is None:
-        return False
-    online = ids_online(fase.jogadores, agora)
+    if fase is None or fase.partida["modo"] != "ao_vivo":
+        return False                             # o modo individual não usa presença
+    online = ids_online(fase.ativos, agora)       # removidos nunca contam como online
 
     if fase.estado == "votacao":
         if pode_fechar_votacao(
-            [j["id"] for j in fase.jogadores], online, fase.ids_que_votaram, fase.ids_que_pularam
+            [j["id"] for j in fase.ativos], online, fase.ids_que_votaram, fase.ids_que_pularam
         ):
             return fechar_votacao(con, partida_id, fase.rodada)
     elif fase.estado == "resultado":
@@ -286,6 +304,61 @@ def forcar_avanco(con, partida_id, estado_esperado, rodada_esperada):
     return False
 
 
+def remover_jogador(con, partida_id, jogador_id, agora):
+    """Botão "Remover" do admin: tira o jogador da partida, para sempre.
+
+    O jogador continua no banco (com removido_em preenchido), mas deixa de
+    contar em todas as regras, e os votos dele saem da rodada em andamento.
+    Rodadas que já fecharam ficam como estão (decisão do dono do projeto).
+    Logo depois, as regras de fechamento/avanço são reavaliadas: remover
+    quem estava travando a rodada libera a partida na hora.
+
+    No modo individual, remover o único que ainda não tinha finalizado
+    encerra a partida.
+    Depois que a partida termina, ninguém mais é removido: o resultado final
+    não muda.
+
+    Devolve True se removeu (False se ele já estava removido).
+    """
+    partida = con.execute(
+        "SELECT modo, estado FROM partidas WHERE id = ?", (partida_id,)
+    ).fetchone()
+    if partida is not None and partida["estado"] == "encerrada":
+        raise AcaoInvalida("A partida já terminou; o resultado final não muda mais.")
+    jogador = con.execute(
+        "SELECT id, removido_em FROM jogadores WHERE id = ? AND partida_id = ?",
+        (jogador_id, partida_id),
+    ).fetchone()
+    if jogador is None:
+        raise AcaoInvalida("Esse jogador não é desta partida.", status=404)
+    if jogador["removido_em"] is not None:
+        return False
+    ativos = con.execute(
+        "SELECT COUNT(*) FROM jogadores WHERE partida_id = ? AND removido_em IS NULL",
+        (partida_id,),
+    ).fetchone()[0]
+    if ativos <= 1:
+        raise AcaoInvalida("Não dá para remover o último jogador ativo da partida.")
+    con.execute("UPDATE jogadores SET removido_em = ? WHERE id = ?", (agora, jogador_id))
+    # Voto (ou abstenção) dele na rodada que ainda está aberta: descartado.
+    # Assim a contagem mostrada no resultado continua batendo com a faixa.
+    # Votos de rodadas já fechadas ficam como estão.
+    con.execute(
+        "DELETE FROM votos WHERE jogador_id = ? AND item_id IN ("
+        "  SELECT i.id FROM itens i JOIN partidas p ON p.id = i.partida_id"
+        "  WHERE p.id = ? AND p.estado = 'votacao' AND i.rodada = p.rodada_atual)",
+        (jogador_id, partida_id),
+    )
+    subir_versao(con, partida_id)
+    if partida["modo"] == "individual":
+        # Importado aqui dentro porque individual.py importa este arquivo.
+        from individual import verificar_encerramento
+        verificar_encerramento(con, partida_id)
+    else:
+        verificar_avanco(con, partida_id, agora)
+    return True
+
+
 # ===========================================================================
 # 4. Ações do jogador (sempre dentro de banco.transacao)
 # ===========================================================================
@@ -300,6 +373,8 @@ def registrar_presenca(con, jogador, agora):
 
 def _conferir_fase(fase, estado, rodada):
     """Recusa ações feitas numa fase/rodada que já passou (ex.: tela desatualizada)."""
+    if fase.partida["modo"] != "ao_vivo":
+        raise AcaoInvalida("Esta ação é do modo ao vivo.")
     if fase.estado != estado or fase.rodada != rodada:
         raise AcaoInvalida("A partida já está em outra fase. A tela foi atualizada.")
 
@@ -373,12 +448,17 @@ def montar_estado(con, partida_id, agora, jogador_id=None, para_admin=False):
 
     Votos são anônimos: ninguém recebe o voto de outro jogador. O jogador vê
     só contagens; o admin vê quem já agiu (não em quê votou).
+    Partidas do modo individual são montadas por individual.montar_estado.
     """
+    modo = con.execute("SELECT modo FROM partidas WHERE id = ?", (partida_id,)).fetchone()["modo"]
+    if modo == "individual":
+        from individual import montar_estado as montar_individual   # (import circular)
+        return montar_individual(con, partida_id, jogador_id=jogador_id, para_admin=para_admin)
     fase = ler_fase(con, partida_id)
-    online = ids_online(fase.jogadores, agora)
+    online = ids_online(fase.ativos, agora)      # removidos não entram em nenhuma conta
 
     if fase.estado == "votacao":
-        agiram = set(fase.votos)                 # votou ou pulou
+        agiram = set(fase.votos)                 # votou ou pulou (só ativos)
     elif fase.estado == "resultado":
         agiram = fase.continuaram
     else:
@@ -394,7 +474,7 @@ def montar_estado(con, partida_id, agora, jogador_id=None, para_admin=False):
         "item": None,
         "presenca": {
             "online": len(online),
-            "offline": len(fase.jogadores) - len(online),
+            "offline": len(fase.ativos) - len(online),
             "faltam": len(online - agiram),     # online que ainda não agiram nesta fase
         },
         "distribuicao": None,
@@ -406,13 +486,21 @@ def montar_estado(con, partida_id, agora, jogador_id=None, para_admin=False):
         estado["item"] = {"nome": fase.item["nome"], "imagem": fase.item["imagem"]}
 
     if fase.estado == "resultado":
-        # Contagem de votos por faixa deste item (anônima).
+        # Contagem de votos por faixa deste item (anônima). A rodada já fechou:
+        # a contagem é a do fechamento. Quem foi removido antes de fechar teve o
+        # voto apagado (remover_jogador); quem foi removido depois continua
+        # contado, porque rodadas fechadas ficam como estão (decisão do dono).
         contagem = [0] * len(fase.faixas)
-        for faixa in fase.votos.values():
-            if faixa is not None:
-                contagem[faixa] += 1
+        abstencoes = 0
+        for linha in con.execute(
+            "SELECT faixa_indice FROM votos WHERE item_id = ?", (fase.item["id"],)
+        ):
+            if linha["faixa_indice"] is None:
+                abstencoes += 1
+            else:
+                contagem[linha["faixa_indice"]] += 1
         estado["distribuicao"] = contagem
-        estado["abstencoes"] = len(fase.ids_que_pularam)
+        estado["abstencoes"] = abstencoes
 
     if jogador_id is not None:
         eu = next(j for j in fase.jogadores if j["id"] == jogador_id)
@@ -425,14 +513,18 @@ def montar_estado(con, partida_id, agora, jogador_id=None, para_admin=False):
             "revisao": fase.revisoes.get(jogador_id, 0),
         }
         if fase.estado == "espera":
-            estado["entraram"] = [j["nome"] for j in fase.jogadores if j["visto_em"] is not None]
+            estado["entraram"] = [j["nome"] for j in fase.ativos if j["visto_em"] is not None]
 
     if para_admin:
+        # O admin vê todos, inclusive os removidos (marcados), e o id de cada
+        # um para o botão "Remover".
         estado["jogadores"] = [
             {
+                "id": j["id"],
                 "nome": j["nome"],
                 "entrou": j["visto_em"] is not None,
                 "online": j["id"] in online,
+                "removido": j["removido_em"] is not None,
                 "acao": _acao_na_fase(fase, j["id"]),
             }
             for j in fase.jogadores

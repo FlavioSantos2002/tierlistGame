@@ -19,6 +19,7 @@ from flask import (
 )
 
 import banco
+import individual
 import jogo
 import temas
 from endereco import endereco_publico
@@ -26,6 +27,7 @@ from endereco import endereco_publico
 admin = Blueprint("admin", __name__, url_prefix="/admin")
 
 RODADAS_PADRAO = 12
+MODOS = {"ao_vivo": "Ao vivo", "individual": "Cada um no seu ritmo"}
 MIN_FAIXAS, MAX_FAIXAS = 2, 7
 MIN_JOGADORES, MAX_JOGADORES = 2, 20
 TAMANHO_MAX_ROTULO = 3
@@ -112,7 +114,7 @@ def sair():
 @exige_admin
 def lista():
     partidas = banco.obter().execute(
-        "SELECT id, tema_nome, estado, rodada_atual, total_rodadas, criada_em"
+        "SELECT id, tema_nome, modo, estado, rodada_atual, total_rodadas, criada_em"
         " FROM partidas ORDER BY id DESC"
     ).fetchall()
     return render_template("admin_lista.html", partidas=partidas)
@@ -140,7 +142,8 @@ def nova():
     lista_temas, erro_arquivo = temas.carregar(current_app.config["TEMAS_PATH"])
     validos = {tema["nome"]: tema for tema in lista_temas if tema["valido"]}
 
-    formulario = {"tema": "", "rodadas": RODADAS_PADRAO, "faixas": FAIXAS_PADRAO, "jogadores": ""}
+    formulario = {"modo": "ao_vivo", "tema": "", "rodadas": RODADAS_PADRAO,
+                  "faixas": FAIXAS_PADRAO, "jogadores": ""}
     erros = []
 
     if request.method == "POST" and not erro_arquivo:
@@ -180,6 +183,11 @@ def ler_formulario(campos, validos):
     - dados: valores limpos para `criar_partida`.
     """
     erros = []
+
+    # 0. Modo ("ao vivo" é o padrão, como na versão 1)
+    modo = campos.get("modo", "ao_vivo")
+    if modo not in MODOS:
+        erros.append("Escolha um modo válido.")
 
     # 1. Tema
     nome_tema = campos.get("tema", "")
@@ -249,28 +257,33 @@ def ler_formulario(campos, validos):
         nomes_vistos.add(nome.casefold())
 
     formulario = {
+        "modo": modo,
         "tema": nome_tema,
         "rodadas": texto_rodadas,
         "faixas": faixas or FAIXAS_PADRAO,
         "jogadores": texto_jogadores,
     }
-    dados = {"tema": tema, "rodadas": rodadas, "faixas": faixas, "jogadores": nomes}
+    dados = {"tema": tema, "rodadas": rodadas, "faixas": faixas, "jogadores": nomes, "modo": modo}
     return formulario, erros, dados
 
 
-def criar_partida(tema, rodadas, faixas, jogadores):
+def criar_partida(tema, rodadas, faixas, jogadores, modo="ao_vivo"):
     """Grava a partida e copia para o banco os itens sorteados do tema.
 
     Depois disso, editar o temas.json não afeta mais esta partida.
+    No modo individual, a partida já nasce aberta (sem "Iniciar") e a ordem
+    dos itens de cada jogador é sorteada aqui, uma vez só.
     Devolve o id da partida criada.
     """
     # random.sample sorteia sem repetição e já embaralha a ordem das rodadas.
     sorteados = random.sample(tema["itens"], rodadas)
+    estado_inicial = "aberta" if modo == "individual" else "espera"
     con = banco.obter()
     with banco.transacao(con):
         cursor = con.execute(
-            "INSERT INTO partidas (tema_nome, total_rodadas, criada_em) VALUES (?, ?, ?)",
-            (tema["nome"], rodadas, time.time()),
+            "INSERT INTO partidas (tema_nome, modo, estado, total_rodadas, criada_em)"
+            " VALUES (?, ?, ?, ?, ?)",
+            (tema["nome"], modo, estado_inicial, rodadas, time.time()),
         )
         partida_id = cursor.lastrowid
         con.executemany(
@@ -288,6 +301,8 @@ def criar_partida(tema, rodadas, faixas, jogadores):
             "INSERT INTO jogadores (partida_id, nome, codigo) VALUES (?, ?, ?)",
             [(partida_id, nome, secrets.token_urlsafe(9)) for nome in jogadores],
         )
+        if modo == "individual":
+            individual.sortear_ordens(con, partida_id)
     return partida_id
 
 
@@ -313,6 +328,13 @@ def partida(partida_id):
         "SELECT nome, codigo FROM jogadores WHERE partida_id = ? ORDER BY id",
         (partida_id,),
     ).fetchall()
+    # Modo individual: a confirmação do "Encerrar e revelar" já sai certa na
+    # página (sem esperar o primeiro polling), avisando se ninguém finalizou.
+    ninguem_finalizou = con.execute(
+        "SELECT COUNT(*) FROM jogadores WHERE partida_id = ?"
+        " AND removido_em IS NULL AND finalizado_em IS NOT NULL",
+        (partida_id,),
+    ).fetchone()[0] == 0
     endereco = endereco_publico(
         current_app.config["BASE_URL"], current_app.config["TUNEL_METRICS"]
     )
@@ -324,6 +346,7 @@ def partida(partida_id):
         endereco=endereco,
         tunel_metrics=current_app.config["TUNEL_METRICS"],
         nomes_estados=jogo.NOMES_DOS_ESTADOS,
+        ninguem_finalizou=ninguem_finalizou,
     )
 
 
@@ -360,6 +383,35 @@ def forcar(partida_id):
         flash("Avanço forçado.")
     else:
         flash("Nada foi feito: a partida já tinha mudado de fase.")
+    return redirect(url_for("admin.partida", partida_id=partida_id))
+
+
+@admin.route("/partida/<int:partida_id>/encerrar", methods=["POST"])
+@exige_admin
+def encerrar(partida_id):
+    # "Encerrar e revelar" do modo individual.
+    con = banco.obter()
+    with banco.transacao(con):
+        encerrou = individual.encerrar(con, partida_id)
+    if encerrou:
+        flash("Partida encerrada: os resultados foram revelados.")
+    else:
+        flash("Nada foi feito: a partida não estava aberta no modo individual.")
+    return redirect(url_for("admin.partida", partida_id=partida_id))
+
+
+@admin.route("/partida/<int:partida_id>/remover/<int:jogador_id>", methods=["POST"])
+@exige_admin
+def remover(partida_id, jogador_id):
+    # O jogador tem de ser DESTA partida (jogo.remover_jogador confere): o id de
+    # jogador pode ser reaproveitado depois de apagar uma partida, o de partida não.
+    con = banco.obter()
+    try:
+        with banco.transacao(con):
+            removeu = jogo.remover_jogador(con, partida_id, jogador_id, time.time())
+        flash("Jogador removido." if removeu else "Esse jogador já tinha sido removido.")
+    except jogo.AcaoInvalida as problema:
+        flash(f"Nada foi feito: {problema}")
     return redirect(url_for("admin.partida", partida_id=partida_id))
 
 

@@ -3,11 +3,18 @@
 {% block conteudo %}
 <div id="aviso" class="aviso-flutuante" role="status" hidden></div>
 
+{# As URLs da API ficam aqui; o script certo (ao vivo ou individual) lê as que usa. #}
 <div id="jogo" class="jogo"
      data-url-estado="{{ url_for('jogador.estado', codigo=codigo) }}"
+{% if jogador.modo == "individual" %}
+     data-url-responder="{{ url_for('jogador.responder', codigo=codigo) }}"
+     data-url-finalizar="{{ url_for('jogador.finalizar', codigo=codigo) }}"
+{% else %}
      data-url-votar="{{ url_for('jogador.votar', codigo=codigo) }}"
      data-url-pular="{{ url_for('jogador.pular', codigo=codigo) }}"
-     data-url-continuar="{{ url_for('jogador.continuar', codigo=codigo) }}">
+     data-url-continuar="{{ url_for('jogador.continuar', codigo=codigo) }}"
+{% endif %}
+     >
   {# Aparece até a primeira resposta do servidor (e fica se o JavaScript estiver desligado). #}
   <div class="cartao centro">
     <h1>Olá, {{ jogador.nome }}!</h1>
@@ -19,5 +26,9 @@
 
 {% block scripts %}
 <script src="{{ url_for('static', filename='comum.js') }}"></script>
+{% if jogador.modo == "individual" %}
+<script src="{{ url_for('static', filename='jogador_individual.js') }}"></script>
+{% else %}
 <script src="{{ url_for('static', filename='jogador.js') }}"></script>
+{% endif %}
 {% endblock %}

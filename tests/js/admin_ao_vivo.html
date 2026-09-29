@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <title>Testes da tela do admin (modo ao vivo)</title>
+</head>
+<body>
+  <!-- Mesma estrutura de templates/admin_partida.html no modo ao vivo. -->
+  <div id="aviso" hidden></div>
+  <strong id="vivo-estado"></strong> <span id="vivo-rodada"></span>
+  <section id="ao-vivo" data-modo="ao_vivo"
+           data-url-estado="/admin/api/estado/7"
+           data-url-remover="/admin/partida/7/remover/0"
+           data-csrf="token-de-teste"
+           data-nomes-estados='{"espera": "Aguardando início", "votacao": "Votação", "resultado": "Resultado", "encerrada": "Encerrada"}'>
+    <form id="form-iniciar" hidden></form>
+    <form id="form-forcar" hidden>
+      <input type="hidden" id="forcar-estado"><input type="hidden" id="forcar-rodada">
+      <button id="forcar-texto"></button>
+    </form>
+    <p id="vivo-presenca"></p>
+    <ul id="vivo-jogadores"></ul>
+    <div id="vivo-item" hidden>
+      <h2 id="vivo-item-titulo"></h2>
+      <img id="vivo-item-imagem" alt=""><p id="vivo-item-nome"></p>
+      <div id="vivo-distribuicao"></div>
+    </div>
+    <div id="vivo-tier"></div>
+  </section>
+  <pre id="resultado">rodando</pre>
+
+  <script src="servidor_falso.js"></script>
+  <script src="auxiliares.js"></script>
+  <script src="../../static/comum.js"></script>
+  <script src="../../static/admin_comum.js"></script>
+  <script src="../../static/admin_partida.js"></script>
+  <script src="cenarios_admin_ao_vivo.js"></script>
+</body>
+</html>

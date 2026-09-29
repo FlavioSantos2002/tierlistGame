@@ -2,39 +2,33 @@
 from jogo import calcular_faixa, ids_online, pode_avancar_resultado, pode_fechar_votacao
 
 
-# ----- Cálculo da faixa -----
+# ----- Cálculo da faixa: regra da maioria (0 = S ... 4 = D) -----
 
-def test_voto_unico():
+def test_um_unico_voto():
     assert calcular_faixa([0]) == 0
     assert calcular_faixa([4]) == 4
 
 
-def test_media_inteira():
-    assert calcular_faixa([1, 3]) == 2
+def test_faixa_com_mais_votos():
+    assert calcular_faixa([1, 1, 3]) == 1
+    assert calcular_faixa([0, 2, 2, 2, 4]) == 2
+    assert calcular_faixa([4, 4, 0]) == 4
 
 
-def test_arredonda_para_o_mais_proximo():
-    assert calcular_faixa([0, 0, 1]) == 0      # 0,33
-    assert calcular_faixa([0, 1, 1]) == 1      # 0,67
-    assert calcular_faixa([1, 2, 2, 2]) == 2   # 1,75
-    assert calcular_faixa([1, 1, 1, 2]) == 1   # 1,25
+def test_empate_vai_para_a_pior_faixa():
+    # Exemplos da especificação v2.
+    assert calcular_faixa([1, 1, 2, 2]) == 2      # 2 em A e 2 em B -> B
+    assert calcular_faixa([0, 0, 4, 4]) == 4      # 2 em S e 2 em D -> D
+    assert calcular_faixa([0, 2, 3]) == 3         # 1 em S, 1 em B e 1 em C -> C
 
 
-def test_empate_em_meio_vai_para_a_faixa_melhor():
-    assert calcular_faixa([0, 1]) == 0         # 0,5 -> 0
-    assert calcular_faixa([1, 2]) == 1         # 1,5 -> 1
-    assert calcular_faixa([0, 3]) == 1         # 1,5 -> 1
-    assert calcular_faixa([2, 3]) == 2         # 2,5 -> 2
-    assert calcular_faixa([0, 1, 2, 3]) == 1   # 1,5 -> 1
-    assert calcular_faixa([3, 4]) == 3         # 3,5 -> 3
-
-
-def test_empate_com_muitos_votos_sem_erro_de_arredondamento():
-    # 20 votos com média exatamente 2,5: com float poderia escapar para 3.
-    assert calcular_faixa([2] * 10 + [3] * 10) == 2
+def test_ordem_dos_votos_nao_importa():
+    assert calcular_faixa([2, 1]) == calcular_faixa([1, 2]) == 2
+    assert calcular_faixa([3, 0, 3, 0]) == 3
 
 
 def test_sem_votos_fica_pulado():
+    # As abstenções nem chegam aqui (ver test_fluxo): só abstenções = lista vazia.
     assert calcular_faixa([]) is None
 
 

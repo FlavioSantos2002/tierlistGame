@@ -16,6 +16,10 @@
 
 * { box-sizing: border-box; }
 
+/* O atributo "hidden" sempre esconde, mesmo em elementos que têm "display"
+   definido abaixo (ex.: small { display: block } anulava o hidden). */
+[hidden] { display: none !important; }
+
 body {
   margin: 0;
   background: var(--fundo);
@@ -363,3 +367,32 @@ img.sem-imagem { background: #eee; font-size: 0.7rem; color: var(--suave); }
 .bolinha { width: 10px; height: 10px; border-radius: 50%; background: #bbb; flex: none; }
 .jogador-online .bolinha { background: #2e7d32; }
 .jogador-offline .bolinha { background: #c62828; }
+.jogador-removido .jogador-nome { text-decoration: line-through; color: var(--suave); }
+
+/* ----- Versão 2: modo individual, remover jogador, escolha do modo ----- */
+
+label.opcao { display: block; font-weight: 400; margin: 6px 0; }
+label.opcao input { margin-right: 6px; }
+
+button.pequeno { padding: 4px 10px; font-size: 0.85rem; }
+.form-remover { margin: 0 0 0 auto; }
+
+.progresso { margin: 8px 0 12px; }
+.progresso-barra { height: 10px; background: #e4e4ea; border-radius: 5px; overflow: hidden; }
+.progresso-preenchido { height: 100%; background: var(--primaria); }
+.progresso-texto { margin: 4px 0 0; text-align: center; font-weight: 600; }
+
+.cartao-item { margin-bottom: 12px; }
+.navegacao { display: flex; gap: 8px; }
+.navegacao button { flex: 1; }
+button.secundario.escolhida { background: var(--primaria); color: var(--primaria-texto); }
+
+.miniatura-tier.tocavel { cursor: pointer; }
+.miniatura-tier.tocavel:hover, .miniatura-tier.tocavel:focus { outline: 2px solid var(--primaria); }
+
+.compatibilidade p { margin: 4px 0; }
+.compatibilidade-numero { font-size: 2.4rem; font-weight: 800; }
+.bloco-lista { margin-top: 12px; }
+
+.lista-jogador { margin: 8px 0; }
+.lista-jogador summary { cursor: pointer; font-weight: 600; padding: 4px 0; }
